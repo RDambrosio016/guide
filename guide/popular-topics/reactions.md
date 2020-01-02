@@ -132,40 +132,10 @@ client.on('message', async message => {
 
 If you try again with either of the codeblocks above, you'll get the result you originally wanted!
 
-
 ![Emojis reacting in correct order](~@/images/1IWSJ1C.png)
-
 
 ::: tip
 If you aren't familiar with Promises or `async`/`await`, you can read more about them on [MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) or [our guide page on async/await](/additional-info/async-await.md)!
-:::
-
-### Reacting in order using a loop
-
-Lets say you have the reactions in an array called `reactions` such as:
-
-```js
-const reactions = ['🍎', '🍊', '🍇'];
-```
-
-And you would like to react with the emojis in the array. You can use a simple `for... of` loop to achieve this.
-
-```js
-const reactions = ['🍎', '🍊', '🍇'];
-
-client.on('message', async message => {
-	if (message.content === '!fruits') {
-		for (const i of reactions) {
-			await message.react(i);
-		}
-	}
-});
-```
-
-This way you can change the amount of reactions, the order, and the types by simply editing the `reactions` array. By awaiting the `message.react(i)` inside of the `for... of` loop we wait for the reaction to go through before going onto the next, which displays the reactions in order how we want them.
-
-::: warning
-This does not work in order with `.forEach()`. Despite if you declare the function async and await the reacting inside of it, due to the way `.forEach()` behaves, all of the requests will be sent out at once and they will not be in order.
 :::
 
 ### Handling multiple reactions if the order doesn't matter
@@ -184,6 +154,123 @@ if (message.content === '!fruits') {
 ```
 
 The benefit of this small optimization is that you can use `.then()` to handle when all of the Promises have resolved, or `.catch()` when one of them has failed. You can also `await` it since it returns a Promise itself.
+
+## Removing reactions
+
+Now that you know how to add reactions, you might be asking, how do we remove them? In this section you will learn how to remove all reactions, remove reactions by user, and remove reactions by emoji.
+
+::: warning
+All of these methods require `MANAGE_MESSAGES` permissions. Make sure your bot has permissions before attempting to utilize any of these methods, as it will error if it doesnt.
+:::
+
+### Removing all reactions
+
+Removing all reactions from a message is the easiest, the API allows us to do this through a single call. It can be done through the <branch version="11.x" inline> `message.clearReactions()` </branch> <branch version="12.x" inline> `message.reactions.removeAll()` </branch> method. 
+
+<branch version="11.x">
+
+```js
+message.clearReactions()
+	.catch(err => console.error('Failed to clear reactions: ', err));
+```
+
+</branch>
+
+<branch version="12.x">
+
+```js
+message.reactions.removeAll()
+	.catch(err => console.error('Failed to clear reactions: ', err));
+```
+
+</branch>
+
+### Removing reactions by emoji
+
+Removing reactions by emoji is not as straightforward as clearing all reactions. The API does not provide a method for selectively removing reactions by emoji, it only allows us to remove a user from a specific reaction. This means we will have to get the users who reacted with that emoji, and loop through and remove each one of them. Firstly, we need to get the reaction, for unicode emojis, this is simple as escaping the emoji in discord and copying the result as you saw before.
+
+Reaction collections are keyed by <branch version="11.x" inline>`name:id`</branch> <branch version="12.x" inline>`id`</branch> for custom emojis and by `name` for unicode emojis. This means we can simply run a `.get()` on `message.reactions` to get the reaction representing the emoji we want. After we have the reaction, we can loop through `reaction.users` and call <branch version="11.x" inline>`reaction.remove(user)`</branch> <branch version="12.x" inline>`reaction.users.remove()`</branch> on each of them.
+
+For this example we will fetch a specific message for which we want to remove a specific emoji's reaction on.
+
+<branch version="11.x">
+
+```js
+//	Get the reaction representing the emoji
+const reaction = message.reactions.get('Thonk:484535447171760141');
+try {
+	// Loop through each user and remove their reaction
+	for (const user of reaction.users.values()) {
+		await reaction.remove(user);
+	}
+} catch (error) {
+	console.error('Failed to remove reactions.');
+}
+```
+
+</branch>
+
+<branch version="12.x">
+
+```js
+//	Get the reaction representing the emoji
+const reaction = message.reactions.get('484535447171760141');
+try {
+	// Loop through each user and remove their reaction
+	for (const user of reaction.users.values()) {
+		await reaction.users.remove(user);
+	}
+} catch (error) {
+	console.error('Failed to remove reactions.');
+}
+```
+
+</branch>
+
+The reason we use a `for... of` loop over something like `forEach()` is due to `forEach()`'s behavior for async operations. `forEach()` will send out all calls almost at once even if we await inside of the function. However, if we `await` inside of a `for... of` loop, it will wait for the previous reaction to go through, and we avoid spamming the API with a lot of calls at once.
+
+### Removing reactions by user
+
+Removing reactions by user is similar to what we did before. However, instead of iterating through users of a reaction, we will iterate through reactions which include a user. To do this we will get all reactions and filter based on whether the user has reacted. If you are not familiar with `Collection.filter()` and `Collection.has()` take the time to understand what they do and then come back.
+
+<branch version="11.x">
+
+```js
+//	Get the reactions which the user has reacted to
+const userReactions = message.reactions.filter(reaction => reaction.users.has(userId));
+try {
+	// Loop through each reaction and remove the user
+	for (const reaction of userReactions) {
+		await reaction.remove(userId);
+	}
+} catch (error) {
+	console.error('Failed to remove reactions.');
+}
+```
+
+</branch>
+
+<branch version="12.x">
+
+```js
+//	Get the reactions which the user has reacted to
+const userReactions = message.reactions.filter(reaction => reaction.users.has(userId));
+try {
+	// Loop through each reaction and remove the user
+	for (const reaction of userReactions) {
+		await reaction.users.remove(userId);
+	}
+} catch (error) {
+	console.error('Failed to remove reactions.');
+}
+});
+```
+
+::: warning 
+Make sure not to remove reactions by emoji or by user too much, if there are a lot of reactions or a lot of users it can be considered API spam.
+:::
+
+</branch>
 
 ## Awaiting reactions
 
@@ -220,6 +307,7 @@ This behaviour has been changed in version 12 of the library. It introduces part
 This feature is not available on version 11.x if you want to listen for reactions on old messages please use version 12 of the library.
 
 </branch>
+
 <branch version="12.x">
 
 Messages sent before your bot started are uncached, unless you fetch them first. By default the library does not emit client events if the data received and cached is not sufficient to build fully functional objects.
